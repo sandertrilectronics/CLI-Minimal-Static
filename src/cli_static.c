@@ -146,7 +146,9 @@ static void cli_help_command(void) {
 
 	// Search for the command string in the list of registered commands.
 	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
-		// print the help string
+		// print the command and help string
+		CLI_PUTS(ptr->command_str);
+		CLI_PUTS(" -> ");
 		CLI_PUTS(ptr->help_str);
 	}
 }

@@ -15,7 +15,7 @@ static void cli_reboot_command(char *command_str);
 
 // command table
 cli_command_definition_t cli_command_table[] = {
-		{ "reboot", "reboot: Reboot entire system\r\n", cli_reboot_command, 0 },
+		{ "reboot", "Reboot entire system\r\n", cli_reboot_command, 0 },
 		{ NULL, NULL, NULL, 0 }
 };
 
