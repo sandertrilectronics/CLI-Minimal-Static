@@ -42,24 +42,28 @@ int cli_process_command(char *received_command_str) {
 	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
 		// get the string length from the current command
 		int command_str_len = strlen(received_command_str);
-		// check the byte after the expected end of the string is either the end of 
-		// the string or a space before a parameter. This ensures that the string is not
-		// part of a longer command.
-		if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
-			// compare the string
-			if (strncmp(ptr->command_str, received_command_str, command_str_len) == 0) {
-				// The command has been found.  Check it has the expected
-				// number of parameters.  If cExpectedNumberOfParameters is -1,
-				// then there could be a variable number of parameters and no
-				// check is made. 
-				if (ptr->parameter_count >= 0) {
-					if (cli_get_number_of_parameters(received_command_str) != ptr->parameter_count) {
-						ret = -1;
+		// check if the length from the recieved command is shorter than the command
+		// string. This ensures that half a command doesn't respond
+		if (command_str_len >= strlen(ptr->command_str)) {
+			// check the byte after the expected end of the string is either the end of
+			// the string or a space before a parameter. This ensures that the string is not
+			// part of a longer command.
+			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
+				// compare the string
+				if (strncmp(ptr->command_str, received_command_str, command_str_len) == 0) {
+					// The command has been found.  Check it has the expected
+					// number of parameters.  If cExpectedNumberOfParameters is -1,
+					// then there could be a variable number of parameters and no
+					// check is made.
+					if (ptr->parameter_count >= 0) {
+						if (cli_get_number_of_parameters(received_command_str) != ptr->parameter_count) {
+							ret = -1;
+						}
 					}
-				}
 
-				// done, break from this loop
-				break;
+					// done, break from this loop
+					break;
+				}
 			}
 		}
 	}
