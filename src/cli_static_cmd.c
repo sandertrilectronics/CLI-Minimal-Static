@@ -1,10 +1,5 @@
 /*
  * cli_static_cmd.c
- *
- * Created on: 	May 22, 2019
- * Author: 		Sande
- * Project:		OXI010_SLT_Controller
- * 
  */
 
 // main include
@@ -14,18 +9,18 @@
 static void cli_reboot_command(char *command_str);
 
 // command table
+// structure: { "command", "help string", command_function, number_of_args }
 cli_command_definition_t cli_command_table[] = {
 		{ "reboot", "Reboot entire system\r\n", cli_reboot_command, 0 },
 		{ NULL, NULL, NULL, 0 }
 };
 
-// reboot function
+// reboot function for STM32
 static void cli_reboot_command(char *command_str) {
-	usb_printf("Rebooting system in 1 second...\r\n");
-
-	osDelay(1000);
-
+	// send some feedback
+	CLI_PUTS("Rebooting system in 1 second...\r\n");
+	// wait a second
+	HAL_Delay(1000);
+	// reset system
 	NVIC_SystemReset();
-
-	return;
 }
