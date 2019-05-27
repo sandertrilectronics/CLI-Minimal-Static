@@ -7,11 +7,11 @@
 
 #include <stdint.h>
 
-//////////////////////////
+////////////////////////////////////////////////////
 // application specific
-#include "usb_app.h"
-#define CLI_PUTS(fmt)		usb_printf(fmt, 0)
-//////////////////////////
+#include <stdio.h>
+#define CLI_PUTS(fmt)		printf(fmt)
+////////////////////////////////////////////////////
 
 #ifndef CLI_PUTS
 	#define CLI_PUTS(fmt)
@@ -35,10 +35,39 @@ typedef struct {
 	uint8_t parameter_count;
 } cli_command_definition_t;
 
-// process incomming data
+/**
+ * @brief Process incomming serial data string
+ *
+ * This funciton processes a serial data string which is
+ * given as a parameter. The string should not contain odd
+ * characters like new lines and carriage return characters.
+ * the function will search through all known commands which are 
+ * found inside the cli_static_cmd.c file. If the command is found,
+ * it is executed. If errors occure during the parsing of the command
+ * or the number of parameters is incorrect, a error messege will
+ * be written using CLI_PUTS().
+ * 
+ * @param received_command_str The string to process
+ * 
+ * @return OK (0) or Error (-1)
+ */
 extern int cli_process_command(char *received_command_str);
 
-// get specific parameter number
+/**
+ * @brief Get the specified parameter from a string
+ *
+ * This function will search through the given string for
+ * the specified parameter. The parameters should be split
+ * using spaces and may not contain spaces themselves.
+ * a char pointer to the start of the parameter is returned.
+ * 
+ * @param command_string The string to search through
+ * @param wanted_parameter The integer number of the wanted parameter
+ * @param parameter_str_len A pointer which will contian the 
+ * parameter length when returned
+ * 
+ * @return OK (valid pointer) or Error (NULL pointer)
+ */
 extern char *cli_get_parameter(char *command_string, int wanted_parameter, int *parameter_str_len);
 
 #endif // CLI_STATIC_H_
