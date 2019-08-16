@@ -50,7 +50,7 @@ int cli_process_command(char *received_command_str) {
 			// part of a longer command.
 			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
 				// compare the string
-				if (strncmp(ptr->command_str, received_command_str, command_str_len) == 0) {
+				if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
 					// The command has been found.  Check it has the expected
 					// number of parameters.  If cExpectedNumberOfParameters is -1,
 					// then there could be a variable number of parameters and no
