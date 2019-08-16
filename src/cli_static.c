@@ -56,7 +56,7 @@ int cli_process_command(char *received_command_str) {
 					// then there could be a variable number of parameters and no
 					// check is made.
 					if (ptr->parameter_count >= 0) {
-						if (cli_get_number_of_parameters(received_command_str) != ptr->parameter_count) {
+						if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
 							ret = -1;
 						}
 					}
