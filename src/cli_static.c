@@ -17,6 +17,9 @@ static int8_t cli_get_number_of_parameters(const char *command_str);
 // help command function
 static void cli_help_command(void);
 
+// trim command
+static void cli_trim_lf_cr(char *str);
+
 // process command function
 int cli_process_command(char *received_command_str) {
 	// check parameters
@@ -194,7 +197,7 @@ static int8_t cli_get_number_of_parameters(const char *command_str) {
 static void cli_trim_lf_cr(char *str) {
 	// sanity check parameter
 	if (str == NULL) {
-		return
+		return;
 	}
 
 	// get string length
