@@ -24,6 +24,9 @@ int cli_process_command(char *received_command_str) {
 		return -1;
 	}
 
+	// trim the command string
+	cli_trim_lf_cr(received_command_str);
+
 	// return value
 	int ret = 0;
 
@@ -188,3 +191,26 @@ static int8_t cli_get_number_of_parameters(const char *command_str) {
 	return parameters;
 }
 
+static void cli_trim_lf_cr(char *str) {
+	// sanity check parameter
+	if (str == NULL) {
+		return
+	}
+
+	// get string length
+	int str_end = strlen(str);
+	
+	// sanity check string length
+	if (str_end == 0) {
+		return;
+	}
+
+	// one step back, to the last character
+	str_end--;
+
+	// keep removing CR and LF characters
+	while (str[str_end] == '\r' || str[str_end] == '\n') {
+		str[str_end] = 0;
+		str_end--;
+	}
+}
