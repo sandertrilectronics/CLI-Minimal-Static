@@ -34,11 +34,11 @@
 ////////////////////////////////////////////////////
 // application specific
 #include <stdio.h>
-#define CLI_PUTS(fmt)		printf(fmt)
+#define CLI_PRINTF		printf
 ////////////////////////////////////////////////////
 
-#ifndef CLI_PUTS
-	#define CLI_PUTS(fmt)
+#ifndef CLI_PRINTF
+	#define CLI_PRINTF(fmt)
 #endif
 
 // function pointer typedef
