@@ -77,7 +77,7 @@ int cli_process_command(char *received_command_str) {
 	// check the result
 	if ((ptr->command_str != NULL) && (ret == -1)) {
 		// The command was found, but the number of parameters with the command was incorrect.
-		CLI_PUTS("Incorrect command parameter(s).  Enter 'help' to view a list of available commands.\r\n\0");
+		CLI_PRINTF("Incorrect command parameter(s).  Enter 'help' to view a list of available commands.\r\n\0");
 		// return error
 		ret = -1;
 	}
@@ -89,7 +89,7 @@ int cli_process_command(char *received_command_str) {
 	}
 	else {
 		// pxCommand was NULL, the command was not found.
-		CLI_PUTS("Command not recognized.  Enter 'help' to view a list of available commands.\r\n\0");
+		CLI_PRINTF("Command not recognized.  Enter 'help' to view a list of available commands.\r\n\0");
 		// return error
 		ret = -1;
 	}
@@ -152,14 +152,12 @@ static void cli_help_command(void) {
 	const cli_command_definition_t *ptr;
 
 	// first line on terminal
-	CLI_PUTS("Known commands:\r\n\0");
+	CLI_PRINTF("Known commands:\r\n");
 
 	// Search for the command string in the list of registered commands.
 	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
 		// print the command and help string
-		CLI_PUTS(ptr->command_str);
-		CLI_PUTS(" -> ");
-		CLI_PUTS(ptr->help_str);
+		CLI_PRINTF("%s -> %s\r\n", ptr->command_str, ptr->help_str);
 	}
 }
 
