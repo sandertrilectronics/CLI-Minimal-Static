@@ -18,7 +18,7 @@ However, this may cause trouble when we are parsing (for example) file names:
 cmd-print file A:/example folder/example file.txt
 ```
 
-This causes the string to be splitr into four parameters. This behaviour is not wanted. To overcome this, the apostrophe can be used to indicate that this is indeed a complete string:
+This causes the string to be splited into four parameters. This behaviour is unwanted. To overcome this, the apostrophe can be used to indicate that this is indeed a complete string:
 
 ```
 cmd-print file 'A:/example folder/example file.txt'
