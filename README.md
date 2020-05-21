@@ -8,18 +8,18 @@ A couple of example commands are shown in the "cli_static_cmd.c" file. Implement
 
 The CLI parameters should be splitted with spaces. For example the following is valid:
 
-'''
+```
 cmd-print param1 param2
-'''
+```
 
 However, this may cause trouble when we are parsing (for example) file names:
 
-'''
+```
 cmd-print file A:/example folder/example file.txt
-'''
+```
 
 This causes the string to be splitr into four parameters. This behaviour is not wanted. To overcome this, the apostrophe can be used to indicate that this is indeed a complete string:
 
-'''
+```
 cmd-print file 'A:/example folder/example file.txt'
-'''
+```
