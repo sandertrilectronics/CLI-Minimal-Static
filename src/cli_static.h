@@ -82,8 +82,9 @@ extern int cli_process_command(char *received_command_str);
  *
  * This function will search through the given string for
  * the specified parameter. The parameters should be split
- * using spaces and may not contain spaces themselves.
- * a char pointer to the start of the parameter is returned.
+ * using spaces. A paramter may contian spaces itself, but these
+ * parameters should be placed between apostrophes. A char 
+ * pointer to the start of the parameter is returned.
  * 
  * @param command_string The string to search through
  * @param wanted_parameter The integer number of the wanted parameter
@@ -93,5 +94,24 @@ extern int cli_process_command(char *received_command_str);
  * @return OK (valid pointer) or Error (NULL pointer)
  */
 extern char *cli_get_parameter(char *command_string, int wanted_parameter, int *parameter_str_len);
+
+/**
+ * @brief Get the specified parameter from a string and place it in the given buffer
+ *
+ * This function will search through the given string for
+ * the specified parameter. The parameters should be split
+ * using spaces. A paramter may contian spaces itself, but these
+ * parameters should be placed between apostrophes. The found
+ * parameter is then copied into the given buffer. If the
+ * parameter is longer than the buffer, an error is returned.
+ * 
+ * @param command_string The string to search through
+ * @param wanted_parameter The integer number of the wanted parameter
+ * @param parameter_str_len A pointer which will contian the 
+ * parameter length when returned
+ * 
+ * @return OK (0) or Error (-1)
+ */
+extern int cli_get_parameter_buf(char *command_string, int wanted_parameter, char *buf, int buf_len);
 
 #endif // CLI_STATIC_H_
