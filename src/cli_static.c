@@ -104,6 +104,12 @@ int cli_process_command(char *received_command_str) {
 static char *cli_find_next_parameter(char *start) {
 	uint8_t long_parameter = 0;
 	
+	// check if the data before this is an apostrophe
+	start--;
+	if (*start == '\'')
+		long_parameter = 1;
+	start++;
+	
 	// Find the start of the next string.
 	while (long_parameter || *start != ' ') {
 		// is this a parameter that is surrounded by apostrophe?
@@ -121,6 +127,10 @@ static char *cli_find_next_parameter(char *start) {
 	// move pointer behind the spaces
 	while (*start == ' ')
 		start++;
+		
+	// if this is a parameter with an apostrophe, skip the apostrophe
+	if (*start == '\'')
+		start++;
 			
 	// return the found parameter
 	return start;
@@ -130,6 +140,13 @@ static char *cli_find_next_parameter(char *start) {
 static int cli_get_parameter_len(char *start) {
 	uint8_t long_parameter = 0;
 	int len = 0;
+	
+	// check if the data before the current pointer is an apstrophe
+	start--;
+	if (*start == '\'')
+		// this parameter is a long parameter
+		long_parameter = 1;
+	start++;
 	
 	// Find the next space or end of string
 	while (long_parameter || (*start != ' ' && *start != 0)) {
@@ -141,6 +158,13 @@ static int cli_get_parameter_len(char *start) {
 		start++;
 		len++;
 	}
+	
+	// check if the data before the current pointer is an apstrophe
+	start--;
+	if (*start == '\'')
+		// decrement length
+		len--;
+	start++;
 	
 	// return the found length
 	return len;
