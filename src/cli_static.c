@@ -175,7 +175,6 @@ char *cli_get_parameter(char *command_string, int wanted_parameter, int *paramet
 	// create variables
 	int parameters_found = 0;
 	char *return_str = NULL;
-	uint8_t long_parameter = 0;
 	
 	// clear the string length
 	*parameter_str_len = 0;
@@ -218,7 +217,6 @@ char *cli_get_parameter(char *command_string, int wanted_parameter, int *paramet
 int cli_get_parameter_buf(char *command_string, int wanted_parameter, char *buf, int buf_len) {
 	// create variables
 	int parameters_found = 0;
-	uint8_t long_parameter = 0;
 	int parameter_str_len = 0;
 	int ret = 0;
 	
