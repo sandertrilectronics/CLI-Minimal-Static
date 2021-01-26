@@ -6,6 +6,7 @@
 
 // Standard includes
 #include <string.h>
+#include <ctype.h>
 
 // externally declared command table
 extern const cli_command_definition_t cli_command_table[];
@@ -219,7 +220,10 @@ int cli_get_parameter_buf(char *command_string, int wanted_parameter, char *buf,
 	int parameters_found = 0;
 	int parameter_str_len = 0;
 	int ret = 0;
-	
+
+	// clear buffer first
+	memset(buf, 0, buf_len);
+
 	// loop until the found parameter is the same as the wanted parameter
 	while (1) {
 		// Find the start of the next string. If this is the first loop,
@@ -253,6 +257,46 @@ int cli_get_parameter_buf(char *command_string, int wanted_parameter, char *buf,
 
 	// return the string pointer
 	return ret;
+}
+
+int cli_get_parameter_int(char *cmd, int index, int *ret) {
+	char int_buf[32] = { 0 };
+
+	// get parameter
+	if (cli_get_parameter_buf(cmd, index, int_buf, 32) != 0)
+		return -1;
+
+	// all characters in the parameter should be a number, is this the case?
+	for (uint8_t i = 0; i < strlen(int_buf); i++) {
+		if (!isdigit(int_buf[i]))
+			return -1;
+	}
+
+	// convert to integer
+	*ret = atoi(int_buf);
+
+	// all is good
+	return 0;
+}
+
+int cli_get_parameter_float(char *cmd, int index, float *ret) {
+	char float_buf[32] = { 0 };
+
+	// get parameter
+	if (cli_get_parameter_buf(cmd, index, float_buf, 32) != 0)
+		return -1;
+
+	// all characters in the parameter should be a number or a dot, is this the case?
+	for (uint8_t i = 0; i < strlen(float_buf); i++) {
+		if (!isdigit(float_buf[i]) && float_buf[i] != '.')
+			return -1;
+	}
+
+	// convert to float
+	*ret = atof(float_buf);
+
+	// all is good
+	return 0;
 }
 
 // help command
@@ -309,7 +353,7 @@ static void cli_trim_lf_cr(char *str) {
 
 	// get string length
 	int str_end = strlen(str);
-	
+
 	// sanity check string length
 	if (str_end == 0) {
 		return;

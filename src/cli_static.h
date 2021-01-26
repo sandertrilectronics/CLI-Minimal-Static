@@ -114,4 +114,36 @@ extern char *cli_get_parameter(char *command_string, int wanted_parameter, int *
  */
 extern int cli_get_parameter_buf(char *command_string, int wanted_parameter, char *buf, int buf_len);
 
+/**
+ * @brief Get the specified parameter from a string and parse it to an integer
+ *
+ * The function calls the cli_get_parameter_buf function to get the
+ * given parameter. Then the parameter string is checked if all characters
+ * are numbers. If this is not the case, an error is returned. Otherwise
+ * the string is converted to int and OK is returned.
+ *
+ * @param command_string The string to search through
+ * @param wanted_parameter The integer number of the wanted parameter
+ * @param ret A pointer which will contain the int
+ *
+ * @return OK (0) or Error (-1)
+ */
+int cli_get_parameter_int(char *cmd, int index, int *ret);
+
+/**
+ * @brief Get the specified parameter from a string and parse it to a float
+ *
+ * The function calls the cli_get_parameter_buf function to get the
+ * given parameter. Then the parameter string is checked if all characters
+ * are numbers or a dot. If this is not the case, an error is returned.
+ * Otherwise the string is converted to float and OK is returned.
+ *
+ * @param command_string The string to search through
+ * @param wanted_parameter The integer number of the wanted parameter
+ * @param ret A pointer which will contain the float
+ *
+ * @return OK (0) or Error (-1)
+ */
+int cli_get_parameter_float(char *cmd, int index, float *ret);
+
 #endif // CLI_STATIC_H_
