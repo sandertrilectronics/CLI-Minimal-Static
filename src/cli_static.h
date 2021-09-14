@@ -31,18 +31,29 @@
 
 #include <stdint.h>
 
-////////////////////////////////////////////////////
-// application specific
-#include <stdio.h>
-#define CLI_PRINTF		printf
-////////////////////////////////////////////////////
+// external command list used?
+#define CLI_CMD_LIST_STATIC			1
 
-#ifndef CLI_PRINTF
-	#define CLI_PRINTF(fmt)
-#endif
+// maximum list of commands
+#define CLI_CMD_LIST_MAX			40
+
+// maximum amount of channels
+#define CLI_CHANNELS_MAX			4
+
+// channel output function typedef
+typedef void (*channel_putc_f)(char c);
+
+// channel definition
+typedef struct {
+	// the name of the channel, e.g. UART, Telnet, etc.
+	const char *name;
+	// the output print function of the channel. Uses simple putc
+	// type and is used by cli_printf and cli_write functions
+	channel_putc_f out;
+} cli_channel_t;
 
 // function pointer typedef
-typedef void (*command_line_callback_f)(char *command_str);
+typedef void (*command_line_callback_f)(cli_channel_t *chn, char *command_str);
 
 // command structure
 typedef struct {
@@ -60,6 +71,42 @@ typedef struct {
 } cli_command_definition_t;
 
 /**
+ * @brief Register a new CLI channel
+ * 
+ * This function registers a channel in the CLI. The
+ * variables are stored in a static array and a pointer
+ * to the given entry is returned. When no more space is
+ * left a NULL pointer is returned. 
+ * 
+ * This pointer should be given to cli_process_command
+ * when data is handled.
+ * 
+ * @param name The name of this channel
+ * @param out The output function for this channel (putc)
+ * 
+ * @return Entry pointer or NULL
+ */
+extern cli_channel_t *cli_channel_register(const char *name, channel_putc_f out);
+
+#if CLI_CMD_LIST_STATIC == 0
+/**
+ * @brief Register a command in the CLI
+ * 
+ * Register a command in the CLI buffer. may only be used if
+ * CLI_CMD_LIST_STATIC == 0. The maximum amount of commands is
+ * given by CLI_CMD_LIST_MAX.
+ * 
+ * @param command_str The command to respond to, no spaces allowed
+ * @param help_str The help string to display on the 'help' command
+ * @param command_callback The callback for the command
+ * @param parameter_count The amount of expected parameters
+ * 
+ * @return Register OK (0) or no room (-1)
+ */
+extern int cli_command_register(const char *command_str, const char *help_str, const command_line_callback_f command_callback, uint8_t parameter_count);
+#endif
+
+/**
  * @brief Process incomming serial data string
  *
  * This funciton processes a serial data string which is
@@ -72,10 +119,33 @@ typedef struct {
  * be written using CLI_PUTS().
  * 
  * @param received_command_str The string to process
+ * @param chn The channel to send the command string to
  * 
  * @return OK (0) or Error (-1)
  */
-extern int cli_process_command(char *received_command_str);
+extern int cli_process_command(cli_channel_t *chn, char *received_command_str);
+
+/**
+ * @brief printf through the given channel
+ * 
+ * Printf through the given channel. Could be slow since
+ * the length of the buffer is taken from vsnprintf and
+ * then it is called again to fill the buffer.
+ * 
+ * @param chn Channel to send to
+ * @param fmt Formatted string
+ */
+extern void cli_printf(cli_channel_t *chn, const char *fmt, ...);
+
+/**
+ * @brief Write a blob of data through the given channel
+ * 
+ * Send data through the given channel.
+ * 
+ * @param chn Channel to send to
+ * @param fmt Formatted string
+ */
+extern void cli_write_data(cli_channel_t *chn, uint8_t *data, uint32_t len);
 
 /**
  * @brief Get the specified parameter from a string
@@ -128,7 +198,7 @@ extern int cli_get_parameter_buf(char *command_string, int wanted_parameter, cha
  *
  * @return OK (0) or Error (-1)
  */
-int cli_get_parameter_int(char *cmd, int index, int *ret);
+extern int cli_get_parameter_int(char *cmd, int index, int *ret);
 
 /**
  * @brief Get the specified parameter from a string and parse it to a float
@@ -144,6 +214,6 @@ int cli_get_parameter_int(char *cmd, int index, int *ret);
  *
  * @return OK (0) or Error (-1)
  */
-int cli_get_parameter_float(char *cmd, int index, float *ret);
+extern int cli_get_parameter_float(char *cmd, int index, float *ret);
 
 #endif // CLI_STATIC_H_
