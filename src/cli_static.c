@@ -11,170 +11,82 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <limits.h>
+
+///////////////////////// variables //////////////////////////
 
 #if CLI_CMD_LIST_STATIC == 1
 // externally declared command table
 extern const cli_command_definition_t cli_command_table[];
 #else
-static cli_command_definition_t cli_command_table[CLI_CMD_LIST_MAX] = { 0 };
+// statically used list
+static cli_command_list_t cli_command_table[CLI_CMD_LIST_MAX] = { 0 };
+
+// list for all commands that are used in all channels
+static cli_command_list_t *glob_cmd_list;
 #endif
 
 // buffered channels
 static cli_channel_t _channels[CLI_CHANNELS_MAX] = { 0 };
 
-// static function which gets the number of parameters.
-// This number depends on the amount of found spaces
-static int8_t cli_get_number_of_parameters(const char *command_str);
-
-// help command function
-static void cli_help_command(void);
-
-// trim command
-static void cli_trim_lf_cr(char *str);
-
-// register channel function
-cli_channel_t *cli_channel_register(const char *name, channel_putc_f out) {
-	// are there any spots free?
-	for (int i = 0; i < CLI_CHANNELS_MAX; i++) {
-		if (_channels[i].name == NULL && _channels[i].out == NULL) {
-			_channels[i].name = name;
-			_channels[i].out = out;
-			return &_channels[i];
-		}
-	}
-
-	// no more room
-	return NULL;
-}
-
+///////////////////////// linked list helpers //////////////////////////
 #if CLI_CMD_LIST_STATIC == 0
-int cli_command_register(const char *command_str, const char *help_str, const command_line_callback_f command_callback, uint8_t parameter_count) {
-	// are there any spots free?
+static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
+	cli_command_list_t *ret = NULL;
+
+	// search for a free spot
 	for (int i = 0; i < CLI_CMD_LIST_MAX; i++) {
-		if (cli_command_table[i].command_str == NULL && cli_command_table[i].help_str == NULL && cli_command_table[i].command_callback == NULL) {
-			cli_command_table[i].command_str = command_str;
-			cli_command_table[i].help_str = help_str;
-			cli_command_table[i].command_callback = command_callback;
-			cli_command_table[i].parameter_count = parameter_count;
-			return 0;
+		// free spot?
+		if (cli_command_table[i].next == NULL) {
+			ret = &cli_command_table[i];
+			break;
 		}
 	}
 
-	// no room
-	return -1;
-}
-#endif
+	// no more room?
+	if (ret == NULL)
+		return NULL;
 
-// process command function
-int cli_process_command(cli_channel_t *chn, char *received_command_str) {
-	// check parameters
-	if (received_command_str == NULL) {
-		return -1;
-	}
-
-	// trim the command string
-	cli_trim_lf_cr(received_command_str);
-
-	// return value
-	int ret = 0;
-
-	// check for help command
-	if (strncmp(received_command_str, "help", 4) == 0 && received_command_str[4] == 0) {
-		// execute help command
-		cli_help_command(chn);
-		// return ok
-		return ret;
-	}
-
-	// pointer to first known command
-	const cli_command_definition_t *ptr;
-
-	// Search for the command string in the list of registered commands.
-	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
-		// get the string length from the current command
-		int command_str_len = strlen(received_command_str);
-		// check if the length from the recieved command is shorter than the command
-		// string. This ensures that half a command doesn't respond
-		if (command_str_len >= strlen(ptr->command_str)) {
-			// check the byte after the expected end of the string is either the end of
-			// the string or a space before a parameter. This ensures that the string is not
-			// part of a longer command.
-			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
-				// compare the string
-				if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
-					// The command has been found.  Check it has the expected
-					// number of parameters.  If cExpectedNumberOfParameters is -1,
-					// then there could be a variable number of parameters and no
-					// check is made.
-					if (ptr->parameter_count >= 0) {
-						if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
-							ret = -1;
-						}
-					}
-
-					// done, break from this loop
-					break;
-				}
-			}
+	// we are appending to a list?
+	if (cmd != NULL) {
+		// move to end of the list
+		while (cmd->next != INT_MAX) {
+			// shouldn't happen!
+			if (cmd->next == NULL)
+				return -1;
 		}
+
+		// append item
+		cmd->next = ret;
 	}
 
-	// check the result
-	if ((ptr->command_str != NULL) && (ret == -1)) {
-		// The command was found, but the number of parameters with the command was incorrect.
-		cli_printf(chn, "Incorrect command parameter(s).  Enter 'help' to view a list of available commands.\r\n\0");
-		// return error
-		ret = -1;
-	}
-	else if (ptr->command_str != NULL) {
-		// Call the callback function that is registered to this command.
-		ptr->command_callback(chn, received_command_str);
-		// return ok
-		ret = 0;
-	}
-	else {
-		// pxCommand was NULL, the command was not found.
-		cli_printf(chn, "Command not recognized.  Enter 'help' to view a list of available commands.\r\n\0");
-		// return error
-		ret = -1;
-	}
+	// this entry is now the end of the list
+	ret->next = INT_MAX;
 
-	// return the return value
+	// all good
 	return ret;
 }
 
-// printf through the given channel
-void cli_printf(cli_channel_t *chn, const char *fmt, ...) {
-	// start list
-	va_list args;
-	va_start(args, fmt);
+static void cli_cmd_list_remove(cli_command_list_t *cmd) {
+	// invalid list given?
+	if (cmd == NULL)
+		return;
+	
+	cli_command_list_t *next = NULL;
 
-	// get length
-	int len = vsnprintf(NULL, 0, fmt, args);
-
-	// create buffer
-	//char buf[len];
-	char* buf = malloc(len);
-
-	// print again
-	vsnprintf(buf, len, fmt, args);
-
-	// end
-	va_end(args);
-
-	// write it
-	cli_write_data(chn, buf, len);
-
-	free(buf);
-}
-
-// write a buffer of data through the given channel
-void cli_write_data(cli_channel_t *chn, uint8_t *data, uint32_t len) {
-	// write complete buffer to out function
-	for (uint32_t i = 0; i < len; i++) {
-		chn->out((char)data[i]);
+	// loop until last entry
+	while (next != INT_MAX) {
+		next = cmd->next;
+		cmd->next = NULL;
+		memset(&cmd->data, 0, sizeof(cli_command_definition_t));
 	}
+
+	// list removed
+	return;
 }
+#endif
+
+///////////////////////// static functions //////////////////////////
 
 // Search for the next parameter. This is done by searching for
 // the next space. However, there should also be acounted for
@@ -246,6 +158,340 @@ static int cli_get_parameter_len(char *start) {
 	
 	// return the found length
 	return len;
+}
+
+// static function which gets the number of parameters.
+// This number depends on the amount of found spaces
+static int8_t cli_get_number_of_parameters(const char *command_str) {
+	// create variables
+	int8_t parameters = 0;
+	int last_character_was_space = 0;
+
+	// Count the number of space delimited words in pcCommandString.
+	while (*command_str != 0x00) {
+		if ((*command_str) == ' ') {
+			if (last_character_was_space != 1) {
+				parameters++;
+				last_character_was_space = 1;
+			}
+		}
+		else {
+			last_character_was_space = 0;
+		}
+		command_str++;
+	}
+
+	// If the command string ended with spaces, then there will have been too
+	// many parameters counted.
+	if (last_character_was_space == 1) {
+		parameters--;
+	}
+
+	// The value returned is one less than the number of space delimited words,
+	// as the first word should be the command itself.
+	return parameters;
+}
+
+// help command function
+static void cli_help_command(cli_channel_t *chn) {
+	// pointer to first known command
+	const cli_command_definition_t *ptr;
+
+	// first line on terminal
+	cli_printf(chn, "Known commands:\r\n");
+
+	// Search for the command string in the list of registered commands.
+	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
+		// print the command and help string
+		cli_printf(chn, "%s -> %s\r\n", ptr->command_str, ptr->help_str);
+	}
+}
+
+// trim command
+static void cli_trim_lf_cr(char *str) {
+	// sanity check parameter
+	if (str == NULL) {
+		return;
+	}
+
+	// get string length
+	int str_end = strlen(str);
+
+	// sanity check string length
+	if (str_end == 0) {
+		return;
+	}
+
+	// one step back, to the last character
+	str_end--;
+
+	// keep removing CR and LF characters
+	while (str[str_end] == '\r' || str[str_end] == '\n') {
+		str[str_end] = 0;
+		str_end--;
+	}
+}
+
+#if CLI_CMD_LIST_STATIC == 1
+
+static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *received_command_str) {
+	(void)chn;
+
+	// pointer to first known command
+	cli_command_definition_t *ptr = NULL;
+
+	// get the string length from the current command
+	int command_str_len = strlen(received_command_str);
+
+	// Search for the command string in the list of registered commands.
+	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
+		// check if the length from the recieved command is shorter than the command
+		// string. This ensures that half a command doesn't respond
+		if (command_str_len >= strlen(ptr->command_str)) {
+			// check the byte after the expected end of the string is either the end of
+			// the string or a space before a parameter. This ensures that the string is not
+			// part of a longer command.
+			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
+				// compare the string
+				if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
+					// The command has been found.  Check it has the expected
+					// number of parameters.  If cExpectedNumberOfParameters is -1,
+					// then there could be a variable number of parameters and no
+					// check is made.
+					if (ptr->parameter_count >= 0) {
+						if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
+							return NULL;
+						}
+					}
+
+					// copy pointer
+					return ptr;
+				}
+			}
+		}
+	}
+
+	// should not be reached, return error
+	return NULL;
+}
+
+#else
+
+static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *received_command_str) {
+	// copy global list pointer, never edit it!
+	cli_command_list_t *cmd_list_l = glob_cmd_list;
+
+	// current entry
+	cli_command_definition_t *ptr = &cmd_list_l->data;
+
+	// channel list checked flag
+	uint8_t chn_list_checked = 0;
+
+	// get the string length from the current command
+	int command_str_len = strlen(received_command_str);
+
+	// Search for the command string in the list of registered commands.
+	while (1) {
+		// check if the length from the recieved command is shorter than the command
+		// string. This ensures that half a command doesn't respond
+		if (command_str_len >= strlen(ptr->command_str)) {
+			// check the byte after the expected end of the string is either the end of
+			// the string or a space before a parameter. This ensures that the string is not
+			// part of a longer command.
+			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
+				// compare the string
+				if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
+					// The command has been found.  Check it has the expected
+					// number of parameters.  If cExpectedNumberOfParameters is -1,
+					// then there could be a variable number of parameters and no
+					// check is made.
+					if (ptr->parameter_count >= 0) {
+						if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
+							return NULL;
+						}
+					}
+
+					// return pointer to this command
+					return ptr;
+				}
+			}
+		}
+
+		// end of list?
+		if (cmd_list_l->next == INT_MAX || cmd_list_l->next == NULL) {
+			// channel list not yet checked
+			if (!chn_list_checked) {
+				// copy channel list pointer, never edit it!
+				cmd_list_l = chn->cmd_list;
+				ptr = &cmd_list_l->data;
+
+				// set flag
+				chn_list_checked = 1;
+			}
+			// channel list checked, done.
+			else {
+				break;
+			}
+		}
+		// not end of list
+		else {
+			// next item
+			cmd_list_l = cmd_list_l->next;
+			ptr = &cmd_list_l->data;
+		}
+	}
+
+	// should not be reached, return error
+	return NULL;
+}
+
+#endif
+
+///////////////////////// public functions //////////////////////////
+// register channel function
+cli_channel_t *cli_channel_register(const char *name, channel_putc_f out) {
+	// are there any spots free?
+	for (int i = 0; i < CLI_CHANNELS_MAX; i++) {
+		if (_channels[i].name == NULL && _channels[i].out == NULL) {
+			_channels[i].name = name;
+			_channels[i].out = out;
+#if CLI_CMD_LIST_STATIC == 0
+			_channels[i].cmd_list = NULL;
+#endif
+			return &_channels[i];
+		}
+	}
+
+	// no more room
+	return NULL;
+}
+
+// remove channel function
+int cli_channel_remove(cli_channel_t *chn) {
+	// search for the specified channel
+	for (int i = 0; i < CLI_CHANNELS_MAX; i++) {
+		if (chn == &_channels[i]) {
+			_channels[i].name = NULL;
+			_channels[i].out = NULL;
+#if CLI_CMD_LIST_STATIC == 0
+			cli_cmd_list_remove(_channels[i].cmd_list);
+			_channels[i].cmd_list = NULL;
+#endif
+			return 0;
+		}
+	}
+
+	// channel not found
+	return -1;
+}
+
+#if CLI_CMD_LIST_STATIC == 0
+int cli_command_register_global(const char *command_str, const char *help_str, const command_line_callback_f command_callback, uint8_t parameter_count) {
+	// search for a spot in the global list
+	cli_command_list_t *cmd = cli_cmd_list_get_spot(glob_cmd_list);
+
+	// no more room?
+	if (cmd == NULL)
+		return -1;
+	
+	// place data in command entry
+	cmd->data.command_str = command_str;
+	cmd->data.help_str = help_str;
+	cmd->data.command_callback = command_callback;
+	cmd->data.parameter_count = parameter_count;
+	
+	// all good
+	return 0;
+}
+
+int cli_command_register_channel(cli_channel_t *chn, const char *command_str, const char *help_str, const command_line_callback_f command_callback, uint8_t parameter_count) {
+	// search for a spot in the channel list
+	cli_command_list_t *cmd = cli_cmd_list_get_spot(chn->cmd_list);
+
+	// no more room?
+	if (cmd == NULL)
+		return -1;
+	
+	// place data in command entry
+	cmd->data.command_str = command_str;
+	cmd->data.help_str = help_str;
+	cmd->data.command_callback = command_callback;
+	cmd->data.parameter_count = parameter_count;
+	
+	// all good
+	return 0;
+}
+#endif
+
+// process command function
+int cli_process_command(cli_channel_t *chn, char *received_command_str) {
+	// check parameters
+	if (received_command_str == NULL) {
+		return -1;
+	}
+
+	// trim the command string
+	cli_trim_lf_cr(received_command_str);
+
+	// check for help command
+	if (strncmp(received_command_str, "help", 4) == 0 && received_command_str[4] == 0) {
+		// execute help command
+		cli_help_command(chn);
+
+		// return ok
+		return 0;
+	}
+
+	// pointer to first known command
+	cli_command_definition_t *ptr = cli_get_callback(chn, received_command_str);
+
+	// check the result
+	if (ptr != NULL) {
+		// Call the callback function that is registered to this command.
+		ptr->command_callback(chn, received_command_str);
+
+		// return ok
+		return 0;
+	}
+	else {
+		// pxCommand was NULL, the command was not found.
+		cli_printf(chn, "Command not recognized or incorrect command parameter(s). Enter 'help' to view a list of available commands.\r\n\0");
+		
+		// return error
+		return -1;
+	}
+}
+
+// printf through the given channel
+void cli_printf(cli_channel_t *chn, const char *fmt, ...) {
+	// start list
+	va_list args;
+	va_start(args, fmt);
+
+	// get length
+	int len = vsnprintf(NULL, 0, fmt, args);
+
+	// create buffer
+	char buf[len];
+
+	// print again
+	vsnprintf(buf, len, fmt, args);
+
+	// end
+	va_end(args);
+
+	// write it
+	cli_write_data(chn, (uint8_t *)buf, len);
+
+	free(buf);
+}
+
+// write a buffer of data through the given channel
+void cli_write_data(cli_channel_t *chn, uint8_t *data, uint32_t len) {
+	// write complete buffer to out function
+	for (uint32_t i = 0; i < len; i++) {
+		chn->out((char)data[i]);
+	}
 }
 
 // get parameter function
@@ -374,74 +620,4 @@ int cli_get_parameter_float(char *cmd, int index, float *ret) {
 
 	// all is good
 	return 0;
-}
-
-// help command
-static void cli_help_command(cli_channel_t *chn) {
-	// pointer to first known command
-	const cli_command_definition_t *ptr;
-
-	// first line on terminal
-	cli_printf(chn, "Known commands:\r\n");
-
-	// Search for the command string in the list of registered commands.
-	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
-		// print the command and help string
-		cli_printf(chn, "%s -> %s\r\n", ptr->command_str, ptr->help_str);
-	}
-}
-
-// get number of parameters
-static int8_t cli_get_number_of_parameters(const char *command_str) {
-	// create variables
-	int8_t parameters = 0;
-	int last_character_was_space = 0;
-
-	// Count the number of space delimited words in pcCommandString.
-	while (*command_str != 0x00) {
-		if ((*command_str) == ' ') {
-			if (last_character_was_space != 1) {
-				parameters++;
-				last_character_was_space = 1;
-			}
-		}
-		else {
-			last_character_was_space = 0;
-		}
-		command_str++;
-	}
-
-	// If the command string ended with spaces, then there will have been too
-	// many parameters counted.
-	if (last_character_was_space == 1) {
-		parameters--;
-	}
-
-	// The value returned is one less than the number of space delimited words,
-	// as the first word should be the command itself.
-	return parameters;
-}
-
-static void cli_trim_lf_cr(char *str) {
-	// sanity check parameter
-	if (str == NULL) {
-		return;
-	}
-
-	// get string length
-	int str_end = strlen(str);
-
-	// sanity check string length
-	if (str_end == 0) {
-		return;
-	}
-
-	// one step back, to the last character
-	str_end--;
-
-	// keep removing CR and LF characters
-	while (str[str_end] == '\r' || str[str_end] == '\n') {
-		str[str_end] = 0;
-		str_end--;
-	}
 }
