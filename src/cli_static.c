@@ -23,7 +23,7 @@ extern const cli_command_definition_t cli_command_table[];
 static cli_command_list_t cli_command_table[CLI_CMD_LIST_MAX] = { 0 };
 
 // list for all commands that are used in all channels
-static cli_command_list_t *glob_cmd_list;
+static cli_command_list_t *glob_cmd_list = NULL;
 #endif
 
 // buffered channels
@@ -50,10 +50,10 @@ static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
 	// we are appending to a list?
 	if (cmd != NULL) {
 		// move to end of the list
-		while (cmd->next != INT_MAX) {
+		while ((intptr_t)cmd->next != INT_MAX) {
 			// shouldn't happen!
 			if (cmd->next == NULL)
-				return -1;
+				return NULL;
 		}
 
 		// append item
@@ -61,7 +61,7 @@ static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
 	}
 
 	// this entry is now the end of the list
-	ret->next = INT_MAX;
+	ret->next = (cli_command_list_t *)INT_MAX;
 
 	// all good
 	return ret;
@@ -75,7 +75,7 @@ static void cli_cmd_list_remove(cli_command_list_t *cmd) {
 	cli_command_list_t *next = NULL;
 
 	// loop until last entry
-	while (next != INT_MAX) {
+	while ((intptr_t)next != INT_MAX) {
 		next = cmd->next;
 		cmd->next = NULL;
 		memset(&cmd->data, 0, sizeof(cli_command_definition_t));
@@ -194,17 +194,44 @@ static int8_t cli_get_number_of_parameters(const char *command_str) {
 
 // help command function
 static void cli_help_command(cli_channel_t *chn) {
+#if CLI_CMD_LIST_STATIC == 1
 	// pointer to first known command
-	const cli_command_definition_t *ptr;
-
+	cli_command_definition_t *ptr;
+	
 	// first line on terminal
-	cli_printf(chn, "Known commands:\r\n");
-
+	cli_printf(chn, "Known commands for channel %s:\r\n", chn>name);
+	
 	// Search for the command string in the list of registered commands.
 	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
 		// print the command and help string
 		cli_printf(chn, "%s -> %s\r\n", ptr->command_str, ptr->help_str);
 	}
+#else
+	// pointer to first known command
+	cli_command_list_t *ptr = glob_cmd_list;
+	
+	// first line on terminal
+	cli_printf(chn, "Known commands for channel %s:\r\n", chn->name);
+	
+	// print out global list
+	while ((intptr_t)ptr != INT_MAX) {
+		// print the command and help string
+		cli_printf(chn, "%s -> %s\r\n", ptr->data.command_str, ptr->data.help_str);
+		// next command
+		ptr = ptr->next;
+	}
+	
+	// set pointer to channel list
+	ptr = chn->cmd_list;
+	
+	// print out channel list
+	while ((intptr_t)ptr != INT_MAX) {
+		// print the command and help string
+		cli_printf(chn, "%s -> %s\r\n", chn->cmd_list->data.command_str, chn->cmd_list->data.help_str);
+		// next command
+		ptr = ptr->next;
+	}
+#endif	
 }
 
 // trim command
@@ -244,7 +271,7 @@ static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *rece
 	int command_str_len = strlen(received_command_str);
 
 	// Search for the command string in the list of registered commands.
-	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
+	for (ptr = (cli_command_definition_t *)cli_command_table; ptr->command_str != NULL; ptr++) {
 		// check if the length from the recieved command is shorter than the command
 		// string. This ensures that half a command doesn't respond
 		if (command_str_len >= strlen(ptr->command_str)) {
@@ -318,7 +345,7 @@ static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *rece
 		}
 
 		// end of list?
-		if (cmd_list_l->next == INT_MAX || cmd_list_l->next == NULL) {
+		if ((intptr_t)cmd_list_l->next == INT_MAX || cmd_list_l->next == NULL) {
 			// channel list not yet checked
 			if (!chn_list_checked) {
 				// copy channel list pointer, never edit it!
@@ -482,8 +509,6 @@ void cli_printf(cli_channel_t *chn, const char *fmt, ...) {
 
 	// write it
 	cli_write_data(chn, (uint8_t *)buf, len);
-
-	free(buf);
 }
 
 // write a buffer of data through the given channel

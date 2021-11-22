@@ -5,9 +5,11 @@
 // main include
 #include "cli_static.h"
 
+#if CLI_CMD_LIST_STATIC == 1
 // function prototypes
-static void cli_reboot_command(cli_channel_t* chn, char *command_str);
-static void cli_print_command(cli_channel_t* chn, char *command_str);
+void cli_reboot_command(cli_channel_t* chn, char *command_str);
+void cli_print_command(cli_channel_t* chn, char *command_str);
+void cli_print_buf_command(cli_channel_t* chn, char *command_str);
 
 // command table
 // structure: { "command", "help string", command_function, number_of_args }
@@ -17,14 +19,15 @@ cli_command_definition_t cli_command_table[] = {
 		{ "cmd-print-buf", "Print all the given parameters\r\n", cli_print_command, 0 },
 		{ NULL, NULL, NULL, 0 }
 };
+#endif
 
 // reboot function for STM32
-static void cli_reboot_command(cli_channel_t* chn, char *command_str) {
+void cli_reboot_command(cli_channel_t* chn, char *command_str) {
 	// send some feedback
 	cli_printf(chn, "Rebooting command received\r\n");
 }
 
-static void cli_print_command(cli_channel_t* chn, char *command_str) {
+void cli_print_command(cli_channel_t* chn, char *command_str) {
 	int i = 1;
 	int str_len = 0;
 	
@@ -44,7 +47,7 @@ static void cli_print_command(cli_channel_t* chn, char *command_str) {
 	}
 }
 
-static void cli_print_buf_command(cli_channel_t* chn, char *command_str) {
+void cli_print_buf_command(cli_channel_t* chn, char *command_str) {
 	int i = 1;
 	char buf[128];
 	
