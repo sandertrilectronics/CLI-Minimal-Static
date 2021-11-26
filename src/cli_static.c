@@ -37,7 +37,7 @@ static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
 	// search for a free spot
 	for (int i = 0; i < CLI_CMD_LIST_MAX; i++) {
 		// free spot?
-		if (cli_command_table[i].next == NULL) {
+		if (cli_command_table[i].data.command_callback == NULL && cli_command_table[i].data.command_str == NULL && cli_command_table[i].data.help_str == NULL) {
 			ret = &cli_command_table[i];
 			break;
 		}
@@ -50,7 +50,7 @@ static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
 	// we are appending to a list?
 	if (cmd != NULL) {
 		// move to end of the list
-		while ((intptr_t)cmd->next != INT_MAX) {
+		while (cmd->next != NULL) {
 			// shouldn't happen!
 			if (cmd->next == NULL)
 				return NULL;
@@ -61,7 +61,7 @@ static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
 	}
 
 	// this entry is now the end of the list
-	ret->next = (cli_command_list_t *)INT_MAX;
+	ret->next = NULL;
 
 	// all good
 	return ret;
@@ -75,7 +75,7 @@ static void cli_cmd_list_remove(cli_command_list_t *cmd) {
 	cli_command_list_t *next = NULL;
 
 	// loop until last entry
-	while ((intptr_t)next != INT_MAX) {
+	while (next != NULL) {
 		next = cmd->next;
 		cmd->next = NULL;
 		memset(&cmd->data, 0, sizeof(cli_command_definition_t));
@@ -214,7 +214,7 @@ static void cli_help_command(cli_channel_t *chn) {
 	cli_printf(chn, "Known commands for channel %s:\r\n", chn->name);
 	
 	// print out global list
-	while ((intptr_t)ptr != INT_MAX) {
+	while (ptr != NULL) {
 		// print the command and help string
 		cli_printf(chn, "%s -> %s\r\n", ptr->data.command_str, ptr->data.help_str);
 		// next command
@@ -225,7 +225,7 @@ static void cli_help_command(cli_channel_t *chn) {
 	ptr = chn->cmd_list;
 	
 	// print out channel list
-	while ((intptr_t)ptr != INT_MAX) {
+	while (ptr != NULL) {
 		// print the command and help string
 		cli_printf(chn, "%s -> %s\r\n", chn->cmd_list->data.command_str, chn->cmd_list->data.help_str);
 		// next command
@@ -315,37 +315,40 @@ static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *rece
 	uint8_t chn_list_checked = 0;
 
 	// get the string length from the current command
-	int command_str_len = strlen(received_command_str);
+	uint32_t command_str_len = strlen(received_command_str);
 
 	// Search for the command string in the list of registered commands.
 	while (1) {
-		// check if the length from the recieved command is shorter than the command
-		// string. This ensures that half a command doesn't respond
-		if (command_str_len >= strlen(ptr->command_str)) {
-			// check the byte after the expected end of the string is either the end of
-			// the string or a space before a parameter. This ensures that the string is not
-			// part of a longer command.
-			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
-				// compare the string
-				if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
-					// The command has been found.  Check it has the expected
-					// number of parameters.  If cExpectedNumberOfParameters is -1,
-					// then there could be a variable number of parameters and no
-					// check is made.
-					if (ptr->parameter_count >= 0) {
-						if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
-							return NULL;
+		// an empty list has no data, check for that
+		if (ptr != NULL) {
+			// check if the length from the recieved command is shorter than the command
+			// string. This ensures that half a command doesn't respond
+			if (command_str_len >= strlen(ptr->command_str)) {
+				// check the byte after the expected end of the string is either the end of
+				// the string or a space before a parameter. This ensures that the string is not
+				// part of a longer command.
+				if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
+					// compare the string
+					if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
+						// The command has been found.  Check it has the expected
+						// number of parameters.  If cExpectedNumberOfParameters is -1,
+						// then there could be a variable number of parameters and no
+						// check is made.
+						if (ptr->parameter_count >= 0) {
+							if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
+								return NULL;
+							}
 						}
-					}
 
-					// return pointer to this command
-					return ptr;
+						// return pointer to this command
+						return ptr;
+					}
 				}
 			}
 		}
 
 		// end of list?
-		if ((intptr_t)cmd_list_l->next == INT_MAX || cmd_list_l->next == NULL) {
+		if (cmd_list_l == NULL || cmd_list_l->next == NULL) {
 			// channel list not yet checked
 			if (!chn_list_checked) {
 				// copy channel list pointer, never edit it!
@@ -426,6 +429,10 @@ int cli_command_register_global(const char *command_str, const char *help_str, c
 	cmd->data.help_str = help_str;
 	cmd->data.command_callback = command_callback;
 	cmd->data.parameter_count = parameter_count;
+
+	// global pointer not yet set?
+	if (glob_cmd_list == NULL)
+		glob_cmd_list = cmd;
 	
 	// all good
 	return 0;
@@ -444,6 +451,10 @@ int cli_command_register_channel(cli_channel_t *chn, const char *command_str, co
 	cmd->data.help_str = help_str;
 	cmd->data.command_callback = command_callback;
 	cmd->data.parameter_count = parameter_count;
+
+	// pointer not yet set
+	if (chn->cmd_list == NULL)
+		chn->cmd_list = cmd;
 	
 	// all good
 	return 0;
@@ -499,16 +510,26 @@ void cli_printf(cli_channel_t *chn, const char *fmt, ...) {
 	int len = vsnprintf(NULL, 0, fmt, args);
 
 	// create buffer
-	char buf[len];
+#if 0
+	char buf[len + 2];
+#else
+	char* buf = malloc(len + 2);
+#endif
 
 	// print again
-	vsnprintf(buf, len, fmt, args);
+	vsnprintf(buf, len + 2, fmt, args);
 
 	// end
 	va_end(args);
 
 	// write it
 	cli_write_data(chn, (uint8_t *)buf, len);
+
+#if 0
+	char buf[len];
+#else
+	free(buf);
+#endif
 }
 
 // write a buffer of data through the given channel
@@ -641,7 +662,7 @@ int cli_get_parameter_float(char *cmd, int index, float *ret) {
 	}
 
 	// convert to float
-	*ret = atof(float_buf);
+	*ret = (float)atof(float_buf);
 
 	// all is good
 	return 0;

@@ -29,6 +29,10 @@
 #ifndef CLI_STATIC_H_
 #define CLI_STATIC_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 // external command list used?
@@ -65,8 +69,8 @@ typedef struct {
 typedef struct cli_command_list_t {
 	// data object for the linked list
 	cli_command_definition_t data;
-	// next item in the linked list. NULL means empty, INT_MAX means
-	// last entry in a list and other are valid pointers.
+	// next item in the linked list. NULL means empty or end of list
+	// and other are valid pointers.
 	struct cli_command_list_t *next;
 } cli_command_list_t;
 #endif
@@ -236,5 +240,9 @@ extern int cli_get_parameter_int(char *cmd, int index, int *ret);
  * @return OK (0) or Error (-1)
  */
 extern int cli_get_parameter_float(char *cmd, int index, float *ret);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CLI_STATIC_H_

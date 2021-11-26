@@ -1,0 +1,2 @@
+C:\Users\Sande\source\repos\testt\Debug\testt.exe
+C:\GitHub\CLI-Minimal-Static\test\Debug\testt.exe
