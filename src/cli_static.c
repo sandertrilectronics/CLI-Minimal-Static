@@ -637,7 +637,7 @@ int cli_get_parameter_int(char *cmd, int index, int *ret) {
 
 	// all characters in the parameter should be a number, is this the case?
 	for (uint8_t i = 0; i < strlen(int_buf); i++) {
-		if (!isdigit(int_buf[i]))
+		if (!(int)isdigit(int_buf[i]))
 			return -1;
 	}
 
@@ -657,7 +657,7 @@ int cli_get_parameter_float(char *cmd, int index, float *ret) {
 
 	// all characters in the parameter should be a number or a dot, is this the case?
 	for (uint8_t i = 0; i < strlen(float_buf); i++) {
-		if (!isdigit(float_buf[i]) && float_buf[i] != '.')
+		if (!(int)isdigit(float_buf[i]) && float_buf[i] != '.')
 			return -1;
 	}
 
