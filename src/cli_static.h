@@ -38,8 +38,11 @@ extern "C" {
 // external command list used?
 #define CLI_CMD_LIST_STATIC			0
 
+// should print buffer be made using malloc?
+#define CLI_PRINT_USE_MALLOC		0
+
 // maximum list of commands
-#define CLI_CMD_LIST_MAX			40
+#define CLI_CMD_LIST_MAX			50 // about 20 bytes RAM per entry
 
 // maximum amount of channels
 #define CLI_CHANNELS_MAX			4
@@ -76,7 +79,7 @@ typedef struct cli_command_list_t {
 #endif
 
 // channel output function typedef
-typedef void (*channel_putc_f)(char c);
+typedef void (*channel_puts_f)(char *, int, void *);
 
 // channel definition
 typedef struct cli_channel {
@@ -84,7 +87,9 @@ typedef struct cli_channel {
 	const char *name;
 	// the output print function of the channel. Uses simple putc
 	// type and is used by cli_printf and cli_write functions
-	channel_putc_f out;
+	channel_puts_f out;
+	// pointer to user variables
+	void *user;
 #if CLI_CMD_LIST_STATIC == 0
 	// list for all commands that are used in this channel
 	cli_command_list_t *cmd_list;
@@ -103,11 +108,12 @@ typedef struct cli_channel {
  * when data is handled.
  * 
  * @param name The name of this channel
- * @param out The output function for this channel (putc)
+ * @param out The output function for this channel (puts)
+ * @param user User variables which are used in the output function
  * 
  * @return Entry pointer or NULL
  */
-extern cli_channel_t *cli_channel_register(const char *name, channel_putc_f out);
+extern cli_channel_t *cli_channel_register(const char *name, channel_puts_f out, void *user);
 
 extern int cli_channel_remove(cli_channel_t *chn);
 

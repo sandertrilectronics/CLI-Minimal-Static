@@ -51,9 +51,7 @@ static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
 	if (cmd != NULL) {
 		// move to end of the list
 		while (cmd->next != NULL) {
-			// shouldn't happen!
-			if (cmd->next == NULL)
-				return NULL;
+			cmd = cmd->next;
 		}
 
 		// append item
@@ -72,7 +70,7 @@ static void cli_cmd_list_remove(cli_command_list_t *cmd) {
 	if (cmd == NULL)
 		return;
 	
-	cli_command_list_t *next = NULL;
+	cli_command_list_t *next = cmd;
 
 	// loop until last entry
 	while (next != NULL) {
@@ -379,12 +377,13 @@ static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *rece
 
 ///////////////////////// public functions //////////////////////////
 // register channel function
-cli_channel_t *cli_channel_register(const char *name, channel_putc_f out) {
+cli_channel_t *cli_channel_register(const char *name, channel_puts_f out, void *user) {
 	// are there any spots free?
 	for (int i = 0; i < CLI_CHANNELS_MAX; i++) {
 		if (_channels[i].name == NULL && _channels[i].out == NULL) {
 			_channels[i].name = name;
 			_channels[i].out = out;
+			_channels[i].user = user;
 #if CLI_CMD_LIST_STATIC == 0
 			_channels[i].cmd_list = NULL;
 #endif
@@ -403,6 +402,7 @@ int cli_channel_remove(cli_channel_t *chn) {
 		if (chn == &_channels[i]) {
 			_channels[i].name = NULL;
 			_channels[i].out = NULL;
+			_channels[i].user = NULL;
 #if CLI_CMD_LIST_STATIC == 0
 			cli_cmd_list_remove(_channels[i].cmd_list);
 			_channels[i].cmd_list = NULL;
@@ -510,10 +510,10 @@ void cli_printf(cli_channel_t *chn, const char *fmt, ...) {
 	int len = vsnprintf(NULL, 0, fmt, args);
 
 	// create buffer
-#if 0
-	char buf[len + 2];
-#else
+#if CLI_PRINT_USE_MALLOC == 1
 	char* buf = malloc(len + 2);
+#else
+	char buf[len + 2];
 #endif
 
 	// print again
@@ -523,11 +523,9 @@ void cli_printf(cli_channel_t *chn, const char *fmt, ...) {
 	va_end(args);
 
 	// write it
-	cli_write_data(chn, (uint8_t *)buf, len);
+	chn->out(buf, len, chn->user);
 
-#if 0
-	char buf[len];
-#else
+#if CLI_PRINT_USE_MALLOC == 1
 	free(buf);
 #endif
 }
@@ -535,9 +533,7 @@ void cli_printf(cli_channel_t *chn, const char *fmt, ...) {
 // write a buffer of data through the given channel
 void cli_write_data(cli_channel_t *chn, uint8_t *data, uint32_t len) {
 	// write complete buffer to out function
-	for (uint32_t i = 0; i < len; i++) {
-		chn->out((char)data[i]);
-	}
+	chn->out((char *)data, len, chn->user);
 }
 
 // get parameter function
