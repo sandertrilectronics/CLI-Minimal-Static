@@ -14,11 +14,7 @@
 #include <limits.h>
 
 ///////////////////////// variables //////////////////////////
-
-#if CLI_CMD_LIST_STATIC == 1
-// externally declared command table
-extern const cli_command_definition_t cli_command_table[];
-#else
+#if CLI_CMD_LIST_DYNAMIC == 1
 // statically used list
 static cli_command_list_t cli_command_table[CLI_CMD_LIST_MAX] = { 0 };
 
@@ -30,7 +26,7 @@ static cli_command_list_t *glob_cmd_list = NULL;
 static cli_channel_t _channels[CLI_CHANNELS_MAX] = { 0 };
 
 ///////////////////////// linked list helpers //////////////////////////
-#if CLI_CMD_LIST_STATIC == 0
+#if CLI_CMD_LIST_DYNAMIC == 1
 static cli_command_list_t *cli_cmd_list_get_spot(cli_command_list_t *cmd) {
 	cli_command_list_t *ret = NULL;
 
@@ -192,42 +188,43 @@ static int8_t cli_get_number_of_parameters(const char *command_str) {
 
 // help command function
 static void cli_help_command(cli_channel_t *chn) {
-#if CLI_CMD_LIST_STATIC == 1
-	// pointer to first known command
-	cli_command_definition_t *ptr;
-	
-	// first line on terminal
-	cli_printf(chn, "Known commands for channel %s:\r\n", chn>name);
-	
-	// Search for the command string in the list of registered commands.
-	for (ptr = cli_command_table; ptr->command_str != NULL; ptr++) {
-		// print the command and help string
-		cli_printf(chn, "%s -> %s\r\n", ptr->command_str, ptr->help_str);
-	}
-#else
-	// pointer to first known command
-	cli_command_list_t *ptr = glob_cmd_list;
-	
 	// first line on terminal
 	cli_printf(chn, "Known commands for channel %s:\r\n", chn->name);
+
+#if CLI_CMD_LIST_STATIC == 1
+	// pointer to first known command
+	cli_command_definition_t *ptr_static;
+	
+	// Search for the command string in the list of registered commands.
+	if (chn->static_cmd_list != NULL) {
+		for (ptr_static = chn->static_cmd_list; ptr_static->command_str != NULL; ptr_static++) {
+			// print the command and help string
+			cli_printf(chn, "%s -> %s", ptr_static->command_str, ptr_static->help_str);
+		}
+	}
+#endif
+
+#if CLI_CMD_LIST_DYNAMIC == 1
+	// pointer to first known command
+	cli_command_list_t *ptr_dynamic = glob_cmd_list;
 	
 	// print out global list
-	while (ptr != NULL) {
+	while (ptr_dynamic != NULL) {
 		// print the command and help string
-		cli_printf(chn, "%s -> %s\r\n", ptr->data.command_str, ptr->data.help_str);
+		cli_printf(chn, "%s -> %s\r\n", ptr_dynamic->data.command_str, ptr_dynamic->data.help_str);
 		// next command
-		ptr = ptr->next;
+		ptr_dynamic = ptr_dynamic->next;
 	}
 	
 	// set pointer to channel list
-	ptr = chn->cmd_list;
+	ptr_dynamic = chn->dynamic_cmd_list;
 	
 	// print out channel list
-	while (ptr != NULL) {
+	while (ptr_dynamic != NULL) {
 		// print the command and help string
-		cli_printf(chn, "%s -> %s\r\n", chn->cmd_list->data.command_str, chn->cmd_list->data.help_str);
+		cli_printf(chn, "%s -> %s\r\n", ptr_dynamic->data.command_str, ptr_dynamic->data.help_str);
 		// next command
-		ptr = ptr->next;
+		ptr_dynamic = ptr_dynamic->next;
 	}
 #endif	
 }
@@ -257,123 +254,74 @@ static void cli_trim_lf_cr(char *str) {
 	}
 }
 
-#if CLI_CMD_LIST_STATIC == 1
-
 static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *received_command_str) {
-	(void)chn;
+	cli_command_definition_t *result = NULL;
+	uint32_t command_str_len = strlen(received_command_str);
 
-	// pointer to first known command
-	cli_command_definition_t *ptr = NULL;
+#if CLI_CMD_LIST_STATIC == 1
+	// Search static command list
+	if (chn->static_cmd_list != NULL) {
+		cli_command_definition_t *ptr_static;
+		for (ptr_static = chn->static_cmd_list; ptr_static->command_str != NULL; ptr_static++) {
+			if (command_str_len >= strlen(ptr_static->command_str)) {
+				if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
+					if (strncmp(ptr_static->command_str, received_command_str, strlen(ptr_static->command_str)) == 0) {
+						if (ptr_static->parameter_count >= 0) {
+							if (cli_get_number_of_parameters(received_command_str) < ptr_static->parameter_count) {
+								return NULL;
+							}
+						}
+						return ptr_static;
+					}
+				}
+			}
+		}
+	}
+#endif
 
-	// get the string length from the current command
-	int command_str_len = strlen(received_command_str);
-
-	// Search for the command string in the list of registered commands.
-	for (ptr = (cli_command_definition_t *)cli_command_table; ptr->command_str != NULL; ptr++) {
-		// check if the length from the recieved command is shorter than the command
-		// string. This ensures that half a command doesn't respond
-		if (command_str_len >= strlen(ptr->command_str)) {
-			// check the byte after the expected end of the string is either the end of
-			// the string or a space before a parameter. This ensures that the string is not
-			// part of a longer command.
+#if CLI_CMD_LIST_DYNAMIC == 1
+	// Search dynamic global command list
+	cli_command_list_t *cmd_list_l = glob_cmd_list;
+	while (cmd_list_l != NULL) {
+		cli_command_definition_t *ptr = &cmd_list_l->data;
+		if (ptr != NULL && command_str_len >= strlen(ptr->command_str)) {
 			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
-				// compare the string
 				if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
-					// The command has been found.  Check it has the expected
-					// number of parameters.  If cExpectedNumberOfParameters is -1,
-					// then there could be a variable number of parameters and no
-					// check is made.
 					if (ptr->parameter_count >= 0) {
 						if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
 							return NULL;
 						}
 					}
-
-					// copy pointer
 					return ptr;
 				}
 			}
 		}
+		cmd_list_l = cmd_list_l->next;
 	}
 
-	// should not be reached, return error
-	return NULL;
-}
-
-#else
-
-static cli_command_definition_t *cli_get_callback(cli_channel_t *chn, char *received_command_str) {
-	// copy global list pointer, never edit it!
-	cli_command_list_t *cmd_list_l = glob_cmd_list;
-
-	// current entry
-	cli_command_definition_t *ptr = &cmd_list_l->data;
-
-	// channel list checked flag
-	uint8_t chn_list_checked = 0;
-
-	// get the string length from the current command
-	uint32_t command_str_len = strlen(received_command_str);
-
-	// Search for the command string in the list of registered commands.
-	while (1) {
-		// an empty list has no data, check for that
-		if (ptr != NULL) {
-			// check if the length from the recieved command is shorter than the command
-			// string. This ensures that half a command doesn't respond
-			if (command_str_len >= strlen(ptr->command_str)) {
-				// check the byte after the expected end of the string is either the end of
-				// the string or a space before a parameter. This ensures that the string is not
-				// part of a longer command.
-				if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
-					// compare the string
-					if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
-						// The command has been found.  Check it has the expected
-						// number of parameters.  If cExpectedNumberOfParameters is -1,
-						// then there could be a variable number of parameters and no
-						// check is made.
-						if (ptr->parameter_count >= 0) {
-							if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
-								return NULL;
-							}
+	// Search dynamic channel command list
+	cmd_list_l = chn->dynamic_cmd_list;
+	while (cmd_list_l != NULL) {
+		cli_command_definition_t *ptr = &cmd_list_l->data;
+		if (ptr != NULL && command_str_len >= strlen(ptr->command_str)) {
+			if ((received_command_str[command_str_len] == ' ') || (received_command_str[command_str_len] == 0x00)) {
+				if (strncmp(ptr->command_str, received_command_str, strlen(ptr->command_str)) == 0) {
+					if (ptr->parameter_count >= 0) {
+						if (cli_get_number_of_parameters(received_command_str) < ptr->parameter_count) {
+							return NULL;
 						}
-
-						// return pointer to this command
-						return ptr;
 					}
+					return ptr;
 				}
 			}
 		}
-
-		// end of list?
-		if (cmd_list_l == NULL || cmd_list_l->next == NULL) {
-			// channel list not yet checked
-			if (!chn_list_checked) {
-				// copy channel list pointer, never edit it!
-				cmd_list_l = chn->cmd_list;
-				ptr = &cmd_list_l->data;
-
-				// set flag
-				chn_list_checked = 1;
-			}
-			// channel list checked, done.
-			else {
-				break;
-			}
-		}
-		// not end of list
-		else {
-			// next item
-			cmd_list_l = cmd_list_l->next;
-			ptr = &cmd_list_l->data;
-		}
+		cmd_list_l = cmd_list_l->next;
 	}
+#endif
 
-	// should not be reached, return error
+	// command not found
 	return NULL;
 }
-
-#endif
 
 ///////////////////////// public functions //////////////////////////
 // register channel function
@@ -384,8 +332,11 @@ cli_channel_t *cli_channel_register(const char *name, channel_puts_f out, void *
 			_channels[i].name = name;
 			_channels[i].out = out;
 			_channels[i].user = user;
-#if CLI_CMD_LIST_STATIC == 0
-			_channels[i].cmd_list = NULL;
+#if CLI_CMD_LIST_STATIC == 1
+			_channels[i].static_cmd_list = NULL;
+#endif
+#if CLI_CMD_LIST_DYNAMIC == 1
+			_channels[i].dynamic_cmd_list = NULL;
 #endif
 			return &_channels[i];
 		}
@@ -403,9 +354,12 @@ int cli_channel_remove(cli_channel_t *chn) {
 			_channels[i].name = NULL;
 			_channels[i].out = NULL;
 			_channels[i].user = NULL;
-#if CLI_CMD_LIST_STATIC == 0
-			cli_cmd_list_remove(_channels[i].cmd_list);
-			_channels[i].cmd_list = NULL;
+#if CLI_CMD_LIST_DYNAMIC == 1
+			cli_cmd_list_remove(_channels[i].dynamic_cmd_list);
+			_channels[i].dynamic_cmd_list = NULL;
+#endif
+#if CLI_CMD_LIST_STATIC == 1
+			_channels[i].static_cmd_list = NULL;
 #endif
 			return 0;
 		}
@@ -415,7 +369,21 @@ int cli_channel_remove(cli_channel_t *chn) {
 	return -1;
 }
 
-#if CLI_CMD_LIST_STATIC == 0
+#if CLI_CMD_LIST_STATIC == 1
+int cli_channel_add_static_commands(cli_channel_t *chn, cli_command_definition_t *command_table) {
+	if (chn == NULL) {
+		return -1;
+	}
+
+	// save table pointer in channel
+	chn->static_cmd_list = command_table;
+
+	// done
+	return 0;
+}
+#endif
+
+#if CLI_CMD_LIST_DYNAMIC == 1
 int cli_command_register_global(const char *command_str, const char *help_str, const command_line_callback_f command_callback, uint8_t parameter_count) {
 	// search for a spot in the global list
 	cli_command_list_t *cmd = cli_cmd_list_get_spot(glob_cmd_list);
@@ -440,7 +408,7 @@ int cli_command_register_global(const char *command_str, const char *help_str, c
 
 int cli_command_register_channel(cli_channel_t *chn, const char *command_str, const char *help_str, const command_line_callback_f command_callback, uint8_t parameter_count) {
 	// search for a spot in the channel list
-	cli_command_list_t *cmd = cli_cmd_list_get_spot(chn->cmd_list);
+	cli_command_list_t *cmd = cli_cmd_list_get_spot(chn->dynamic_cmd_list);
 
 	// no more room?
 	if (cmd == NULL)
@@ -453,8 +421,8 @@ int cli_command_register_channel(cli_channel_t *chn, const char *command_str, co
 	cmd->data.parameter_count = parameter_count;
 
 	// pointer not yet set
-	if (chn->cmd_list == NULL)
-		chn->cmd_list = cmd;
+	if (chn->dynamic_cmd_list == NULL)
+		chn->dynamic_cmd_list = cmd;
 	
 	// all good
 	return 0;
@@ -493,7 +461,7 @@ int cli_process_command(cli_channel_t *chn, char *received_command_str) {
 	}
 	else {
 		// pxCommand was NULL, the command was not found.
-		cli_printf(chn, "Command not recognized or incorrect command parameter(s). Enter 'help' to view a list of available commands.\r\n\0");
+		cli_printf(chn, "Command not recognized or incorrect command parameter(s). Enter 'help' to view a list of available commands.\0");
 		
 		// return error
 		return -1;
@@ -624,17 +592,61 @@ int cli_get_parameter_buf(char *command_string, int wanted_parameter, char *buf,
 	return ret;
 }
 
-int cli_get_parameter_int(char *cmd, int index, int *ret) {
+int cli_get_parameter_int_hex(char *cmd, int index, int *ret) {
 	char int_buf[32] = { 0 };
 
 	// get parameter
 	if (cli_get_parameter_buf(cmd, index, int_buf, 32) != 0)
 		return -1;
+	
+	// pointer to start of hex data
+	char *int_ptr = NULL;
+
+	// first or second is a 'x'?
+	if (int_buf[0] == 'x' || int_buf[0] == 'X')
+		int_ptr = &int_buf[1];
+	else if (int_buf[1] == 'x' || int_buf[1] == 'X')
+		int_ptr = &int_buf[2];
+	else
+		return -1;
+
+	// all characters in the parameter should be a number, is this the case?
+	for (uint8_t i = 0; i < strlen(int_ptr); i++) {
+		if (!isxdigit((int)int_ptr[i]))
+			return -1;
+	}
+
+	// convert to integer
+	*ret = strtol(int_ptr, NULL, 16);
+
+	// all is good
+	return 0;
+}
+
+int cli_get_parameter_int(char *cmd, int index, int *ret) {
+	char int_buf[32] = { 0 };
+
+	// get parameter
+	if (cli_get_parameter_buf(cmd, index, int_buf, 32) != 0) {
+		return -1;
+	}
+	
+	// by any chance a hexadecimal number?
+	if (int_buf[0] == 'x' || int_buf[0] == 'X' || int_buf[1] == 'x' || int_buf[1] == 'X') {
+		return cli_get_parameter_int_hex(cmd, index, ret);
+	}
 
 	// all characters in the parameter should be a number, is this the case?
 	for (uint8_t i = 0; i < strlen(int_buf); i++) {
-		if (!(int)isdigit(int_buf[i]))
+		// allow negative or positive sign at the start
+		if (i == 0 && (int_buf[i] == '-' || int_buf[i] == '+')) {
+			continue;
+		}
+
+		// is a digit?
+		if (!isdigit((int)int_buf[i])) {
 			return -1;
+		}
 	}
 
 	// convert to integer
@@ -646,15 +658,34 @@ int cli_get_parameter_int(char *cmd, int index, int *ret) {
 
 int cli_get_parameter_float(char *cmd, int index, float *ret) {
 	char float_buf[32] = { 0 };
+	uint8_t dot_found = 0;
 
 	// get parameter
-	if (cli_get_parameter_buf(cmd, index, float_buf, 32) != 0)
+	if (cli_get_parameter_buf(cmd, index, float_buf, 32) != 0) {
 		return -1;
+	}
 
 	// all characters in the parameter should be a number or a dot, is this the case?
 	for (uint8_t i = 0; i < strlen(float_buf); i++) {
-		if (!(int)isdigit(float_buf[i]) && float_buf[i] != '.')
+		// allow negative or positive sign at the start
+		if (i == 0 && (float_buf[i] == '-' || float_buf[i] == '+')) {
+			continue;
+		}
+
+		// is a dot?
+		if (float_buf[i] == '.') {
+			// only one dot is allowed
+			if (dot_found) {
+				return -1;
+			}
+			dot_found = 1;
+			continue;
+		}
+
+		// is a digit?
+		if (!isdigit((int)float_buf[i])) {
 			return -1;
+		}
 	}
 
 	// convert to float

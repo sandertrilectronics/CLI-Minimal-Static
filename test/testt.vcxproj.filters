@@ -18,15 +18,12 @@
     <ClCompile Include="testt.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\..\..\GitHub\CLI-Minimal-Static\src\cli_static.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\..\..\GitHub\CLI-Minimal-Static\src\cli_static_cmd.c">
+    <ClCompile Include="..\src\cli_static.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\..\GitHub\CLI-Minimal-Static\src\cli_static.h">
+    <ClInclude Include="..\src\cli_static.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

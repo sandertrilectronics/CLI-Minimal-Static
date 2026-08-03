@@ -3,6 +3,7 @@
  */
 
 // main include
+#include <stddef.h>
 #include "cli_static.h"
 
 #if CLI_CMD_LIST_STATIC == 1

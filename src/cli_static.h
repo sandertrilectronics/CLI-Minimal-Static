@@ -35,17 +35,22 @@ extern "C" {
 
 #include <stdint.h>
 
-// external command list used?
-#define CLI_CMD_LIST_STATIC			0
+// static externally declared command list used?
+#define CLI_CMD_LIST_STATIC			1
+
+// dynamic command list used?
+#define CLI_CMD_LIST_DYNAMIC		1
 
 // should print buffer be made using malloc?
-#define CLI_PRINT_USE_MALLOC		0
+#define CLI_PRINT_USE_MALLOC		1
 
+#if CLI_CMD_LIST_DYNAMIC == 1
 // maximum list of commands
-#define CLI_CMD_LIST_MAX			50 // about 20 bytes RAM per entry
+#define CLI_CMD_LIST_MAX			15 // about 20 bytes RAM per entry
+#endif
 
 // maximum amount of channels
-#define CLI_CHANNELS_MAX			4
+#define CLI_CHANNELS_MAX			2
 
 // forward declaration
 typedef struct cli_channel cli_channel_t;
@@ -68,7 +73,7 @@ typedef struct {
 	uint8_t parameter_count;
 } cli_command_definition_t;
 
-#if CLI_CMD_LIST_STATIC == 0
+#if CLI_CMD_LIST_DYNAMIC == 1
 typedef struct cli_command_list_t {
 	// data object for the linked list
 	cli_command_definition_t data;
@@ -90,9 +95,13 @@ typedef struct cli_channel {
 	channel_puts_f out;
 	// pointer to user variables
 	void *user;
-#if CLI_CMD_LIST_STATIC == 0
-	// list for all commands that are used in this channel
-	cli_command_list_t *cmd_list;
+#if CLI_CMD_LIST_DYNAMIC == 1
+	// list for all dynamic commands that are used in this channel
+	cli_command_list_t *dynamic_cmd_list;
+#endif
+#if CLI_CMD_LIST_STATIC == 1
+	// list for all static commands that are used in this channel
+	cli_command_definition_t *static_cmd_list;
 #endif
 } cli_channel_t;
 
@@ -117,12 +126,27 @@ extern cli_channel_t *cli_channel_register(const char *name, channel_puts_f out,
 
 extern int cli_channel_remove(cli_channel_t *chn);
 
-#if CLI_CMD_LIST_STATIC == 0
+#if CLI_CMD_LIST_STATIC == 1
+/**
+ * @brief Add a static command list to a channel
+ * 
+ * This function adds a static command list to a channel. The
+ * command list is given as a pointer to the first entry of the
+ * list. The list should be terminated with a NULL command string.
+ * 
+ * @param chn The channel to add the command list to
+ * @param command_table The pointer to the first entry of the command list
+ * @return 0 on success, -1 on error
+ */
+extern int cli_channel_add_static_commands(cli_channel_t *chn, cli_command_definition_t *command_table);
+#endif
+
+#if CLI_CMD_LIST_DYNAMIC == 1
 /**
  * @brief Register a command in the CLI
  * 
  * Register a command in the CLI buffer. may only be used if
- * CLI_CMD_LIST_STATIC == 0. The maximum amount of commands is
+ * CLI_CMD_LIST_DYNAMIC == 1. The maximum amount of commands is
  * given by CLI_CMD_LIST_MAX.
  * 
  * @param command_str The command to respond to, no spaces allowed
@@ -214,6 +238,22 @@ extern char *cli_get_parameter(char *command_string, int wanted_parameter, int *
  * @return OK (0) or Error (-1)
  */
 extern int cli_get_parameter_buf(char *command_string, int wanted_parameter, char *buf, int buf_len);
+
+/**
+ * @brief Get the specified parameter from a hexadecimal string and parse it to an integer
+ *
+ * The function calls the cli_get_parameter_buf function to get the
+ * given parameter. Then the parameter string is checked if all characters
+ * are hexadecimal numbers. If this is not the case, an error is returned. 
+ * Otherwise the string is converted to int and OK is returned.
+ *
+ * @param command_string The string to search through
+ * @param wanted_parameter The integer number of the wanted parameter
+ * @param ret A pointer which will contain the int
+ *
+ * @return OK (0) or Error (-1)
+ */
+extern int cli_get_parameter_int_hex(char *cmd, int index, int *ret);
 
 /**
  * @brief Get the specified parameter from a string and parse it to an integer
